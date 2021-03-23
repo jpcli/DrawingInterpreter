@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title></title>
+	<meta name="viewport"
+		content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+	<link rel="stylesheet" href="static/layui/css/layui.css">
+	<script src="static/layui/layui.js" type="text/javascript" charset="utf-8"></script>
+	<script src="static/echarts.js" type="text/javascript" charset="utf-8"></script>
+</head>
+
+<body>
+	<div class="layui-container" style="margin: auto;width: 98vw;">
+		<div class="layui-row" style="margin-top: 10px;">
+			<div class="layui-col-lg4">
+
+				<fieldset class="layui-elem-field">
+					<legend>语句</legend>
+					<div class="layui-field-box">
+						<form class="layui-form" action="">
+							<div class="layui-form-item">
+								<label class="layui-form-label">预设语句：</label>
+								<div class="layui-input-block">
+									<select lay-filter="yushe" lay-verify="required">
+										<option value="0">0：空白</option>
+										<option value="1">1：姓名铭牌</option>
+										<option value="2">2：椭圆旋转花</option>
+										<option value="3">3：波浪</option>
+										<option value="4">4：曲线大杂烩</option>
+										<option value="5">5：复杂表达式树构建</option>
+									</select>
+								</div>
+							</div>
+							<div class="layui-form-item layui-form-text">
+								<label class="layui-form-label">语句：</label>
+								<div class="layui-input-block">
+									<textarea id="text" name="statements" style="height:170px" placeholder="请输入内容"
+										class="layui-textarea"></textarea>
+								</div>
+							</div>
+							<div class="layui-form-item">
+								<div class="layui-input-block">
+									<button class="layui-btn" lay-submit lay-filter="formSubmit">开始执行</button>
+								</div>
+							</div>
+						</form>
+					</div>
+				</fieldset>
+
+				<fieldset class="layui-elem-field"">
+						<legend>绘图(500×500)</legend>
+						<div class=" layui-field-box" style="text-align:center;">
+					<img style="height:300px;width:300px;border:solid 1px red;margin:auto;" id="pic"
+						src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRFAAAAp3o92gAAAAF0Uk5TAEDm2GYAAAAKSURBVHicY2AAAAACAAFIr6RxAAAAAElFTkSuQmCC">
+			</div>
+			</fieldset>
+
+		</div>
+		<div class="layui-col-lg8">
+			<fieldset class="layui-elem-field">
+				<legend>Token</legend>
+				<div class="layui-field-box">
+					<table id="tokenTable"></table>
+				</div>
+			</fieldset>
+			<fieldset class="layui-elem-field">
+				<legend>表达式树结构</legend>
+				<div class="layui-field-box">
+					<div id="tree" style="width:100%;height:calc(100vh - 400px);"></div>
+				</div>
+			</fieldset>
+
+		</div>
+	</div>
+	</div>
+
+
+	<script>
+		layui.use(['table', 'form'], function () {
+			var table = layui.table,
+				form = layui.form;
+
+			tableIns = table.render({
+				elem: '#tokenTable',
+				cols: [[
+					{ field: 'num', title: '序号', sort: true },
+					{ field: 'tokenType', title: 'token类型' },
+					{ field: 'lexeme', title: '原始文本' },
+					{ field: 'value', title: '值' },
+					{ field: 'funcPtr', title: '函数指针' },
+				]],
+				height: "250px",
+				data: [],
+				limit: 100000,
+			});
+
+			form.on('select(yushe)', function (data) {
+				changeYushe(data.value)
+			});
+
+			// 监听提交，发送解析请求
+			form.on('submit(formSubmit)', function (data) {
+				// 清除界面
+				tableIns.reload({
+					data: []
+				})
+				treeOption.series[0].data[0] = {}
+				myTree.setOption(treeOption, true);
+				myPic.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRFAAAAp3o92gAAAAF0Uk5TAEDm2GYAAAAKSURBVHicY2AAAAACAAFIr6RxAAAAAElFTkSuQmCC"
+
+				// 发送请求
+				fetch("http://127.0.0.1:8080/interpret", {
+					method: "POST",
+					body: JSON.stringify(data.field)
+				})
+					.then(res => res.json())
+					.then(res => {
+						if (res.code == 1) {
+							tableIns.reload({
+								data: res.tokenData
+							})
+							treeOption.series[0].data[0] = res.treeData
+							myTree.setOption(treeOption, true);
+							myPic.src = "http://127.0.0.1:8080/" + res.pic
+						}
+						else if (res.code == 0) {
+							layer.msg("解释错误： " + res.msg)
+						}
+					})
+
+
+				return false;
+			});
+		});
+
+		var myTree = echarts.init(document.getElementById('tree'));
+		treeOption = {
+			tooltip: {
+				trigger: 'item',
+				triggerOn: 'mousemove'
+			},
+			series: [
+				{
+					type: 'tree',
+					data: [],
+					left: '2%',
+					right: '2%',
+					top: '5%',
+					bottom: '10%',
+					symbol: 'emptyCircle',
+					orient: 'vertical',
+					expandAndCollapse: true,
+					label: {
+						position: 'top',
+						rotate: 0,
+						verticalAlign: 'middle',
+						align: 'middle',
+						fontSize: 10
+					},
+					leaves: {
+						label: {
+							position: 'bottom',
+							rotate: 0,
+							verticalAlign: 'middle',
+							align: 'center',
+							offset: [0, 10]
+						}
+					},
+					animationDurationUpdate: 750
+				}
+			]
+		}
+		myTree.setOption(treeOption);
+
+		myPic = document.querySelector("#pic")
+
+		text = document.querySelector("#text")
+
+		function changeYushe(i) {
+			var txt = ""
+			console.log(i)
+			if (i == 0) {
+				txt = ""
+			} else if (i == 1) {
+				txt = `	ORIGIN IS (250, 250);
+							SCALE IS (240, 200);
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ORIGIN IS (150, 250);
+							SCALE IS (70, 70);
+							FOR T FROM PI TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ORIGIN IS (230, 280);
+							SCALE IS (40, 40);
+							FOR T FROM -0.5*PI TO 0.5*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ORIGIN IS (270, 180);
+							SCALE IS (1, 1);
+							FOR T FROM 0 TO 100 STEP 1 DRAW (-1, T);
+
+							ORIGIN IS (350, 170);
+							FOR T FROM 0 TO 155 STEP 1 DRAW (-1, T);
+
+							ORIGIN IS (350, 220);
+							SCALE IS (75, 50);
+							FOR T FROM 0 TO PI STEP 0.01 DRAW (SIN(T), COS(T));`
+			} else if (i == 2) {
+				txt = `	ORIGIN IS (250, 250);
+							SCALE IS (250, 100);
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ROT IS PI/4;
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ROT IS PI/2;
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ROT IS PI/4*3;
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ROT IS PI;
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));
+
+							ROT IS PI/4;
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (SIN(T), COS(T));`
+			} else if (i == 3) {
+				txt = `	SCALE IS (80, 100);
+
+							ORIGIN IS (0,100);
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (T, SIN(T));
+
+							ORIGIN IS (0,200);
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (T, SIN(T));
+
+							ORIGIN IS (0,300);
+							FOR T FROM 0 TO 2*PI STEP 0.01 DRAW (T, SIN(T));`
+			} else if (i == 4) {
+				txt = `	ORIGIN IS (0,500);
+							SCALE IS (20, 20);
+							FOR T FROM 0 TO 50 STEP 0.01 DRAW(T, -SQRT(T));
+							SCALE IS (1, 10);
+							FOR T FROM 0 TO 500 STEP 0.01 DRAW(T, -LN(T+1));
+							SCALE IS (10, 1);
+							FOR T FROM 0 TO 500 STEP 0.01 DRAW(T, -2**T);
+							FOR T FROM 0 TO 500 STEP 0.01 DRAW(T, -EXP(T));
+							SCALE IS (1, 1);
+							FOR T FROM 0 TO 500 STEP 0.01 DRAW(T, -T);
+							SCALE IS (100, 100);
+							FOR T FROM 0 TO PI STEP 0.01 DRAW(T, -TAN(T));
+							SCALE IS (100, 1);`
+			} else if (i == 5) {
+				txt = `	rot is 12+3*4**5/6*(7-8)/-9.1+SIN(tan(PI-E));
+						rot is 3**4**5;
+						rot is -16+5**3/cos(T);`
+			}
+
+			text.value = txt.replace(/\t/g, "")
+		}
+
+
+	</script>
+</body>
+
+</html>
